@@ -1,4 +1,4 @@
-// Asset data from the provided JSON
+// Portfolio Data
 const assets = [
     {"symbol": "SPY", "name": "SPDR S&P 500 ETF", "mkt_rf": 0.98, "smb": -0.15, "hml": -0.05, "rmw": 0.02},
     {"symbol": "QQQ", "name": "Invesco QQQ ETF", "mkt_rf": 1.15, "smb": -0.25, "hml": -0.35, "rmw": 0.15},
@@ -32,489 +32,508 @@ const assets = [
     {"symbol": "VTI", "name": "Vanguard Total Stock", "mkt_rf": 1.00, "smb": 0.00, "hml": 0.00, "rmw": 0.05}
 ];
 
-// Chart colors for dark theme
-const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'];
+// Global state
+let currentPortfolio = null;
+let factorChart = null;
+let targetFactors = {
+    mkt_rf: 1.00,
+    smb: 0.00,
+    hml: 0.00,
+    rmw: 0.00
+};
 
-// Global variables
-let currentWeights = new Array(assets.length).fill(0);
-let optimizationHistory = [];
-let charts = {};
+// DOM Elements
+const sliders = {
+    mkt_rf: document.getElementById('mkt-rf'),
+    smb: document.getElementById('smb'),
+    hml: document.getElementById('hml'),
+    rmw: document.getElementById('rmw')
+};
 
-// Initialize the application
+const valueDisplays = {
+    mkt_rf: document.getElementById('mkt-rf-value'),
+    smb: document.getElementById('smb-value'),
+    hml: document.getElementById('hml-value'),
+    rmw: document.getElementById('rmw-value')
+};
+
+const optimizeBtn = document.getElementById('optimizeBtn');
+const exportBtn = document.getElementById('exportBtn');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const portfolioTableBody = document.getElementById('portfolioTableBody');
+
+// Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    setupSliders();
-    setupCharts();
-    // Run initial optimization after a short delay to ensure charts are ready
-    setTimeout(() => {
-        optimizePortfolio();
-    }, 100);
+    initializeSliders();
+    initializeChart();
+    initializeEventListeners();
+    showToast('Welcome to Factor Analytics', 'success');
 });
 
-// Setup slider event listeners
-function setupSliders() {
-    const sliders = ['mkt', 'smb', 'hml', 'rmw', 'max-weight', 'min-weight'];
-    
-    sliders.forEach(slider => {
-        const element = document.getElementById(`${slider}-slider`);
-        const valueElement = document.getElementById(`${slider}-value`);
+// Initialize factor sliders
+function initializeSliders() {
+    Object.keys(sliders).forEach(factor => {
+        const slider = sliders[factor];
+        const display = valueDisplays[factor];
         
-        element.addEventListener('input', function() {
-            let value = parseFloat(this.value);
-            let displayValue = value;
+        slider.addEventListener('input', function() {
+            const value = parseFloat(this.value);
+            targetFactors[factor] = value;
+            display.textContent = value.toFixed(2);
             
-            if (slider.includes('weight')) {
-                displayValue = (value * 100).toFixed(0) + '%';
-            } else {
-                displayValue = value.toFixed(1);
-            }
-            
-            valueElement.textContent = displayValue;
-            
-            // Auto-optimize on slider change with debouncing
-            clearTimeout(this.optimizeTimeout);
-            this.optimizeTimeout = setTimeout(() => {
-                optimizePortfolio();
-            }, 300);
+            // Add visual feedback
+            slider.style.background = `linear-gradient(to right, #00d4aa 0%, #00d4aa ${((value - parseFloat(slider.min)) / (parseFloat(slider.max) - parseFloat(slider.min))) * 100}%, rgba(255,255,255,0.1) ${((value - parseFloat(slider.min)) / (parseFloat(slider.max) - parseFloat(slider.min))) * 100}%, rgba(255,255,255,0.1) 100%)`;
         });
-    });
-    
-    // Optimize button
-    document.getElementById('optimize-btn').addEventListener('click', function() {
-        this.textContent = 'Optimizing...';
-        this.disabled = true;
         
-        setTimeout(() => {
-            optimizePortfolio();
-            this.textContent = 'Optimize Portfolio';
-            this.disabled = false;
-        }, 100);
+        // Initialize display
+        display.textContent = slider.value;
+        slider.dispatchEvent(new Event('input'));
     });
-    
-    // Export button
-    document.getElementById('export-btn').addEventListener('click', exportWeights);
 }
 
-// Setup Chart.js charts with dark theme
-function setupCharts() {
-    Chart.defaults.color = '#e1e1e6';
-    Chart.defaults.borderColor = '#404040';
-    Chart.defaults.backgroundColor = '#2d2d30';
+// Initialize Chart.js
+function initializeChart() {
+    const ctx = document.getElementById('factorChart').getContext('2d');
     
-    // Portfolio allocation pie chart
-    const allocationCtx = document.getElementById('allocation-chart').getContext('2d');
-    charts.allocation = new Chart(allocationCtx, {
-        type: 'doughnut',
+    factorChart = new Chart(ctx, {
+        type: 'radar',
         data: {
-            labels: [],
-            datasets: [{
-                data: [],
-                backgroundColor: chartColors,
-                borderWidth: 2,
-                borderColor: '#2d2d30'
-            }]
+            labels: ['Market Risk', 'Size Factor', 'Value Factor', 'Profitability'],
+            datasets: [
+                {
+                    label: 'Target',
+                    data: [1.00, 0.00, 0.00, 0.00],
+                    borderColor: '#00d4aa',
+                    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#00d4aa',
+                    pointBorderColor: '#00d4aa',
+                    pointRadius: 5
+                },
+                {
+                    label: 'Portfolio',
+                    data: [0, 0, 0, 0],
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#2563eb',
+                    pointBorderColor: '#2563eb',
+                    pointRadius: 5
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'right',
                     labels: {
-                        boxWidth: 12,
-                        padding: 15,
-                        color: '#e1e1e6',
+                        color: '#ffffff',
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            },
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    min: -0.5,
+                    max: 1.5,
+                    ticks: {
+                        color: '#999999',
+                        font: {
+                            size: 10
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    angleLines: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    pointLabels: {
+                        color: '#e5e5e5',
                         font: {
                             size: 11
                         }
                     }
-                },
-                tooltip: {
-                    backgroundColor: '#1e1e21',
-                    titleColor: '#e1e1e6',
-                    bodyColor: '#e1e1e6',
-                    borderColor: '#404040',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(context) {
-                            return `${context.label}: ${(context.parsed * 100).toFixed(1)}%`;
-                        }
-                    }
                 }
             }
         }
     });
     
-    // Factor exposure bar chart
-    const exposureCtx = document.getElementById('exposure-chart').getContext('2d');
-    charts.exposure = new Chart(exposureCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Market', 'Size', 'Value', 'Profitability'],
-            datasets: [{
-                label: 'Target',
-                data: [1.0, 0.0, 0.0, 0.0],
-                backgroundColor: '#3b82f6',
-                borderWidth: 0
-            }, {
-                label: 'Portfolio',
-                data: [0, 0, 0, 0],
-                backgroundColor: '#10b981',
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: '#404040'
-                    },
-                    ticks: {
-                        color: '#e1e1e6'
-                    }
-                },
-                x: {
-                    grid: {
-                        color: '#404040'
-                    },
-                    ticks: {
-                        color: '#e1e1e6'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#e1e1e6'
-                    }
-                },
-                tooltip: {
-                    backgroundColor: '#1e1e21',
-                    titleColor: '#e1e1e6',
-                    bodyColor: '#e1e1e6',
-                    borderColor: '#404040',
-                    borderWidth: 1
-                }
-            }
-        }
-    });
+    // Set fixed height for chart container
+    document.querySelector('.chart-container canvas').style.height = '300px';
+}
+
+// Initialize event listeners
+function initializeEventListeners() {
+    optimizeBtn.addEventListener('click', optimizePortfolio);
+    exportBtn.addEventListener('click', exportResults);
     
-    // Convergence line chart
-    const convergenceCtx = document.getElementById('convergence-chart').getContext('2d');
-    charts.convergence = new Chart(convergenceCtx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Tracking Error',
-                data: [],
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                fill: true,
-                tension: 0.4,
-                pointRadius: 2,
-                pointBackgroundColor: '#3b82f6'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: '#404040'
-                    },
-                    ticks: {
-                        color: '#e1e1e6'
-                    }
-                },
-                x: {
-                    grid: {
-                        color: '#404040'
-                    },
-                    ticks: {
-                        color: '#e1e1e6'
-                    }
+    document.getElementById('sortByWeight').addEventListener('click', () => sortTable('weight'));
+    document.getElementById('sortBySymbol').addEventListener('click', () => sortTable('symbol'));
+    
+    // Real-time optimization on slider change (debounced)
+    let optimizeTimeout;
+    Object.values(sliders).forEach(slider => {
+        slider.addEventListener('input', () => {
+            clearTimeout(optimizeTimeout);
+            optimizeTimeout = setTimeout(() => {
+                if (currentPortfolio) {
+                    optimizePortfolio();
                 }
-            },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#e1e1e6'
-                    }
-                },
-                tooltip: {
-                    backgroundColor: '#1e1e21',
-                    titleColor: '#e1e1e6',
-                    bodyColor: '#e1e1e6',
-                    borderColor: '#404040',
-                    borderWidth: 1
-                }
-            }
-        }
+            }, 500);
+        });
     });
 }
 
-// Portfolio optimization function
-function optimizePortfolio() {
-    const targetExposures = {
-        mkt_rf: parseFloat(document.getElementById('mkt-slider').value),
-        smb: parseFloat(document.getElementById('smb-slider').value),
-        hml: parseFloat(document.getElementById('hml-slider').value),
-        rmw: parseFloat(document.getElementById('rmw-slider').value)
-    };
+// Portfolio optimization algorithm
+async function optimizePortfolio() {
+    showLoading(true);
     
-    const maxWeight = parseFloat(document.getElementById('max-weight-slider').value);
-    const minWeight = parseFloat(document.getElementById('min-weight-slider').value);
-    
-    // Optimization algorithm
-    const result = optimizeWeights(targetExposures, minWeight, maxWeight);
-    currentWeights = result.weights;
-    optimizationHistory = result.history;
-    
-    // Update all visualizations
-    updateCharts();
-    updateMetrics();
+    try {
+        // Simulate processing time for smooth UX
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const maxWeight = parseFloat(document.getElementById('max-weight').value) / 100;
+        const minAssets = parseInt(document.getElementById('min-assets').value);
+        
+        // Simple optimization algorithm
+        const result = await optimizeFactorPortfolio(targetFactors, maxWeight, minAssets);
+        
+        currentPortfolio = result;
+        updateResults(result);
+        updateChart(result);
+        updateTable(result);
+        updateMetrics(result);
+        
+        showToast('Portfolio optimized successfully', 'success');
+        
+    } catch (error) {
+        console.error('Optimization error:', error);
+        showToast('Optimization failed. Please try again.', 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
-// Improved optimization algorithm
-function optimizeWeights(targetExposures, minWeight, maxWeight) {
+// Core optimization function
+async function optimizeFactorPortfolio(targets, maxWeight, minAssets) {
     const n = assets.length;
-    let weights = new Array(n).fill(1/n); // Start with equal weights
-    let history = [];
+    let bestWeights = new Array(n).fill(0);
+    let bestError = Infinity;
     
-    // Apply initial constraints
-    for (let i = 0; i < n; i++) {
-        weights[i] = Math.max(minWeight, Math.min(maxWeight, weights[i]));
+    // Genetic algorithm approach for simplicity
+    const populationSize = 100;
+    const generations = 50;
+    
+    for (let gen = 0; gen < generations; gen++) {
+        const population = generatePopulation(populationSize, n, maxWeight, minAssets);
+        
+        for (const weights of population) {
+            const error = calculateFactorError(weights, targets);
+            if (error < bestError) {
+                bestError = error;
+                bestWeights = [...weights];
+            }
+        }
     }
     
-    // Normalize
-    let sum = weights.reduce((a, b) => a + b, 0);
-    weights = weights.map(w => w / sum);
+    // Calculate portfolio metrics
+    const portfolioFactors = calculatePortfolioFactors(bestWeights);
+    const risk = calculatePortfolioRisk(bestWeights);
+    const expectedReturn = calculateExpectedReturn(bestWeights);
+    const sharpeRatio = expectedReturn / risk;
+    const activeAssets = bestWeights.filter(w => w > 0.001).length;
     
-    // Iterative optimization
-    for (let iter = 0; iter < 200; iter++) {
-        // Calculate current exposures
-        const currentExposures = calculatePortfolioExposures(weights);
+    return {
+        weights: bestWeights,
+        factors: portfolioFactors,
+        risk: risk,
+        expectedReturn: expectedReturn,
+        sharpeRatio: sharpeRatio,
+        activeAssets: activeAssets,
+        error: bestError
+    };
+}
+
+// Generate random population for genetic algorithm
+function generatePopulation(size, n, maxWeight, minAssets) {
+    const population = [];
+    
+    for (let i = 0; i < size; i++) {
+        let weights = new Array(n).fill(0);
         
-        // Calculate tracking error
-        const trackingError = Math.sqrt(
-            Math.pow(currentExposures.mkt_rf - targetExposures.mkt_rf, 2) +
-            Math.pow(currentExposures.smb - targetExposures.smb, 2) +
-            Math.pow(currentExposures.hml - targetExposures.hml, 2) +
-            Math.pow(currentExposures.rmw - targetExposures.rmw, 2)
-        );
-        
-        history.push(trackingError);
-        
-        // Early stopping if converged
-        if (trackingError < 0.01) break;
-        
-        // Gradient-based weight adjustment
-        const learningRate = Math.max(0.001, 0.05 / (iter + 1)); // Adaptive learning rate
-        
-        for (let i = 0; i < n; i++) {
-            const asset = assets[i];
-            
-            // Calculate gradient
-            const mktError = currentExposures.mkt_rf - targetExposures.mkt_rf;
-            const smbError = currentExposures.smb - targetExposures.smb;
-            const hmlError = currentExposures.hml - targetExposures.hml;
-            const rmwError = currentExposures.rmw - targetExposures.rmw;
-            
-            const gradient = 2 * (
-                mktError * asset.mkt_rf +
-                smbError * asset.smb +
-                hmlError * asset.hml +
-                rmwError * asset.rmw
-            );
-            
-            // Update weight
-            weights[i] -= learningRate * gradient;
-            
-            // Apply constraints
-            weights[i] = Math.max(minWeight, Math.min(maxWeight, weights[i]));
+        // Select random assets
+        const selectedAssets = [];
+        while (selectedAssets.length < minAssets) {
+            const idx = Math.floor(Math.random() * n);
+            if (!selectedAssets.includes(idx)) {
+                selectedAssets.push(idx);
+            }
         }
         
-        // Normalize weights to sum to 1
-        sum = weights.reduce((a, b) => a + b, 0);
+        // Add some additional random assets
+        const additionalAssets = Math.floor(Math.random() * (n - minAssets) / 2);
+        for (let j = 0; j < additionalAssets; j++) {
+            const idx = Math.floor(Math.random() * n);
+            if (!selectedAssets.includes(idx)) {
+                selectedAssets.push(idx);
+            }
+        }
+        
+        // Assign random weights
+        selectedAssets.forEach(idx => {
+            weights[idx] = Math.random() * maxWeight;
+        });
+        
+        // Normalize to sum to 1
+        const sum = weights.reduce((a, b) => a + b, 0);
         if (sum > 0) {
             weights = weights.map(w => w / sum);
         }
-    }
-    
-    return { weights, history };
-}
-
-// Calculate portfolio factor exposures
-function calculatePortfolioExposures(weights) {
-    const exposures = { mkt_rf: 0, smb: 0, hml: 0, rmw: 0 };
-    
-    for (let i = 0; i < assets.length; i++) {
-        const asset = assets[i];
-        const weight = weights[i];
         
-        exposures.mkt_rf += weight * asset.mkt_rf;
-        exposures.smb += weight * asset.smb;
-        exposures.hml += weight * asset.hml;
-        exposures.rmw += weight * asset.rmw;
+        // Ensure max weight constraint
+        weights = weights.map(w => Math.min(w, maxWeight));
+        
+        // Renormalize
+        const newSum = weights.reduce((a, b) => a + b, 0);
+        if (newSum > 0) {
+            weights = weights.map(w => w / newSum);
+        }
+        
+        population.push(weights);
     }
     
-    return exposures;
+    return population;
 }
 
-// Update all charts
-function updateCharts() {
-    updateAllocationChart();
-    updateExposureChart();
-    updateConvergenceChart();
+// Calculate factor loading error
+function calculateFactorError(weights, targets) {
+    const portfolioFactors = calculatePortfolioFactors(weights);
+    
+    let error = 0;
+    error += Math.pow(portfolioFactors.mkt_rf - targets.mkt_rf, 2) * 4; // Higher weight on market factor
+    error += Math.pow(portfolioFactors.smb - targets.smb, 2) * 2;
+    error += Math.pow(portfolioFactors.hml - targets.hml, 2) * 2;
+    error += Math.pow(portfolioFactors.rmw - targets.rmw, 2) * 1;
+    
+    return error;
 }
 
-// Update portfolio allocation pie chart
-function updateAllocationChart() {
-    const significantWeights = [];
-    const significantLabels = [];
-    const significantColors = [];
+// Calculate portfolio factor loadings
+function calculatePortfolioFactors(weights) {
+    const factors = { mkt_rf: 0, smb: 0, hml: 0, rmw: 0 };
     
-    // Create array of assets with weights for sorting
-    const assetsWithWeights = assets.map((asset, i) => ({
-        ...asset,
-        weight: currentWeights[i],
-        index: i
-    }));
+    weights.forEach((weight, i) => {
+        if (weight > 0) {
+            factors.mkt_rf += weight * assets[i].mkt_rf;
+            factors.smb += weight * assets[i].smb;
+            factors.hml += weight * assets[i].hml;
+            factors.rmw += weight * assets[i].rmw;
+        }
+    });
     
-    // Sort by weight descending and take top holdings
-    assetsWithWeights.sort((a, b) => b.weight - a.weight);
+    return factors;
+}
+
+// Calculate portfolio risk (simplified)
+function calculatePortfolioRisk(weights) {
+    // Simplified risk calculation based on factor loadings
+    const factors = calculatePortfolioFactors(weights);
+    const variance = Math.pow(factors.mkt_rf, 2) * 0.16 + 
+                    Math.pow(factors.smb, 2) * 0.04 + 
+                    Math.pow(factors.hml, 2) * 0.04 + 
+                    Math.pow(factors.rmw, 2) * 0.02 + 
+                    0.01; // Idiosyncratic risk
     
-    let otherWeight = 0;
-    for (let i = 0; i < assetsWithWeights.length; i++) {
-        const item = assetsWithWeights[i];
-        if (item.weight > 0.02 && significantWeights.length < 10) { // Show top 10 holdings > 2%
-            significantWeights.push(item.weight);
-            significantLabels.push(item.symbol);
-            significantColors.push(chartColors[significantWeights.length - 1]);
-        } else if (item.weight > 0.001) {
-            otherWeight += item.weight;
+    return Math.sqrt(variance);
+}
+
+// Calculate expected return (simplified)
+function calculateExpectedReturn(weights) {
+    const factors = calculatePortfolioFactors(weights);
+    // Risk premiums: Market=6%, SMB=2%, HML=3%, RMW=2%
+    return factors.mkt_rf * 0.06 + factors.smb * 0.02 + factors.hml * 0.03 + factors.rmw * 0.02 + 0.02; // Risk-free rate
+}
+
+// Update results display
+function updateResults(result) {
+    // This function can be used for additional result processing
+    console.log('Portfolio optimized:', result);
+}
+
+// Update chart
+function updateChart(result) {
+    if (!factorChart) return;
+    
+    const targetData = [
+        targetFactors.mkt_rf,
+        targetFactors.smb,
+        targetFactors.hml,
+        targetFactors.rmw
+    ];
+    
+    const portfolioData = [
+        result.factors.mkt_rf,
+        result.factors.smb,
+        result.factors.hml,
+        result.factors.rmw
+    ];
+    
+    factorChart.data.datasets[0].data = targetData;
+    factorChart.data.datasets[1].data = portfolioData;
+    factorChart.update('active');
+}
+
+// Update portfolio table
+function updateTable(result) {
+    const tbody = portfolioTableBody;
+    tbody.innerHTML = '';
+    
+    // Create array of assets with weights
+    const portfolioAssets = assets
+        .map((asset, index) => ({
+            ...asset,
+            weight: result.weights[index]
+        }))
+        .filter(asset => asset.weight > 0.001)
+        .sort((a, b) => b.weight - a.weight);
+    
+    portfolioAssets.forEach(asset => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${asset.symbol}</strong></td>
+            <td>${asset.name}</td>
+            <td><strong>${(asset.weight * 100).toFixed(2)}%</strong></td>
+            <td>${asset.mkt_rf.toFixed(2)}</td>
+            <td>${asset.smb.toFixed(2)}</td>
+            <td>${asset.hml.toFixed(2)}</td>
+            <td>${asset.rmw.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Update metrics display
+function updateMetrics(result) {
+    document.getElementById('portfolio-risk').textContent = `${(result.risk * 100).toFixed(2)}%`;
+    document.getElementById('expected-return').textContent = `${(result.expectedReturn * 100).toFixed(2)}%`;
+    document.getElementById('sharpe-ratio').textContent = result.sharpeRatio.toFixed(2);
+    document.getElementById('active-assets').textContent = result.activeAssets;
+    
+    // Add animated counters
+    animateValue('portfolio-risk', 0, result.risk * 100, 1000, 2, '%');
+    animateValue('expected-return', 0, result.expectedReturn * 100, 1000, 2, '%');
+    animateValue('sharpe-ratio', 0, result.sharpeRatio, 1000, 2);
+    animateValue('active-assets', 0, result.activeAssets, 800, 0);
+}
+
+// Animate numeric values
+function animateValue(elementId, start, end, duration, decimals = 0, suffix = '') {
+    const element = document.getElementById(elementId);
+    const startTime = performance.now();
+    
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+        const current = start + (end - start) * easeOutCubic;
+        
+        element.textContent = current.toFixed(decimals) + suffix;
+        
+        if (progress < 1) {
+            requestAnimationFrame(update);
         }
     }
     
-    // Add "Others" category if there are small holdings
-    if (otherWeight > 0.001) {
-        significantWeights.push(otherWeight);
-        significantLabels.push('Others');
-        significantColors.push('#6b7280');
+    requestAnimationFrame(update);
+}
+
+// Sort table
+function sortTable(criteria) {
+    if (!currentPortfolio) return;
+    
+    const tbody = portfolioTableBody;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    rows.sort((a, b) => {
+        if (criteria === 'weight') {
+            const weightA = parseFloat(a.cells[2].textContent.replace('%', ''));
+            const weightB = parseFloat(b.cells[2].textContent.replace('%', ''));
+            return weightB - weightA;
+        } else if (criteria === 'symbol') {
+            const symbolA = a.cells[0].textContent;
+            const symbolB = b.cells[0].textContent;
+            return symbolA.localeCompare(symbolB);
+        }
+        return 0;
+    });
+    
+    tbody.innerHTML = '';
+    rows.forEach(row => tbody.appendChild(row));
+    
+    showToast(`Table sorted by ${criteria}`, 'success');
+}
+
+// Export results
+function exportResults() {
+    if (!currentPortfolio) {
+        showToast('No portfolio to export. Please optimize first.', 'warning');
+        return;
     }
     
-    charts.allocation.data.labels = significantLabels;
-    charts.allocation.data.datasets[0].data = significantWeights;
-    charts.allocation.data.datasets[0].backgroundColor = significantColors;
-    charts.allocation.update('none'); // No animation for better performance
-}
-
-// Update factor exposure chart
-function updateExposureChart() {
-    const targetExposures = [
-        parseFloat(document.getElementById('mkt-slider').value),
-        parseFloat(document.getElementById('smb-slider').value),
-        parseFloat(document.getElementById('hml-slider').value),
-        parseFloat(document.getElementById('rmw-slider').value)
-    ];
-    
-    const portfolioExposures = calculatePortfolioExposures(currentWeights);
-    const portfolioValues = [
-        portfolioExposures.mkt_rf,
-        portfolioExposures.smb,
-        portfolioExposures.hml,
-        portfolioExposures.rmw
-    ];
-    
-    charts.exposure.data.datasets[0].data = targetExposures;
-    charts.exposure.data.datasets[1].data = portfolioValues;
-    charts.exposure.update('none');
-}
-
-// Update convergence chart
-function updateConvergenceChart() {
-    const iterations = Array.from({length: optimizationHistory.length}, (_, i) => i + 1);
-    
-    charts.convergence.data.labels = iterations;
-    charts.convergence.data.datasets[0].data = optimizationHistory;
-    charts.convergence.update('none');
-}
-
-// Update portfolio metrics
-function updateMetrics() {
-    const targetExposures = {
-        mkt_rf: parseFloat(document.getElementById('mkt-slider').value),
-        smb: parseFloat(document.getElementById('smb-slider').value),
-        hml: parseFloat(document.getElementById('hml-slider').value),
-        rmw: parseFloat(document.getElementById('rmw-slider').value)
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        targetFactors: targetFactors,
+        portfolio: currentPortfolio,
+        assets: assets.map((asset, index) => ({
+            ...asset,
+            weight: currentPortfolio.weights[index]
+        })).filter(asset => asset.weight > 0.001)
     };
     
-    const portfolioExposures = calculatePortfolioExposures(currentWeights);
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `portfolio-optimization-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     
-    // Calculate tracking error
-    const trackingError = Math.sqrt(
-        Math.pow(portfolioExposures.mkt_rf - targetExposures.mkt_rf, 2) +
-        Math.pow(portfolioExposures.smb - targetExposures.smb, 2) +
-        Math.pow(portfolioExposures.hml - targetExposures.hml, 2) +
-        Math.pow(portfolioExposures.rmw - targetExposures.rmw, 2)
-    );
-    
-    // Number of holdings (weights > 0.1%)
-    const numHoldings = currentWeights.filter(w => w > 0.001).length;
-    
-    // Largest position
-    const largestPosition = Math.max(...currentWeights);
-    
-    // Concentration (Herfindahl-Hirschman Index)
-    const hhi = currentWeights.reduce((sum, w) => sum + w * w, 0);
-    
-    // Update display
-    document.getElementById('tracking-error').textContent = trackingError.toFixed(4);
-    document.getElementById('num-holdings').textContent = numHoldings;
-    document.getElementById('largest-position').textContent = (largestPosition * 100).toFixed(1) + '%';
-    document.getElementById('concentration').textContent = hhi.toFixed(4);
+    showToast('Portfolio exported successfully', 'success');
 }
 
-// Export portfolio weights
-function exportWeights() {
-    // Filter out very small weights for cleaner export
-    const data = assets
-        .map((asset, i) => ({
-            symbol: asset.symbol,
-            name: asset.name,
-            weight: currentWeights[i]
-        }))
-        .filter(item => item.weight > 0.001) // Only export weights > 0.1%
-        .sort((a, b) => b.weight - a.weight) // Sort by weight descending
-        .map(item => ({
-            symbol: item.symbol,
-            name: item.name,
-            weight: (item.weight * 100).toFixed(2) + '%'
-        }));
-    
-    const csvContent = 'Symbol,Name,Weight\n' + 
-        data.map(row => `${row.symbol},"${row.name}",${row.weight}`).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'portfolio_weights.csv');
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+// Show/hide loading overlay
+function showLoading(show) {
+    const overlay = loadingOverlay;
+    if (show) {
+        overlay.classList.add('active');
     } else {
-        // Fallback for browsers that don't support download attribute
-        const url = 'data:text/csv;charset=utf-8,' + encodeURI(csvContent);
-        window.open(url);
+        overlay.classList.remove('active');
     }
+}
+
+// Show toast notification
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    
+    // Trigger animation
+    setTimeout(() => toast.classList.add('show'), 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => container.removeChild(toast), 300);
+    }, 3000);
 }
