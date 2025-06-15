@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fama-French 4-Factor Portfolio Optimization Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <h1>Fama-French 4-Factor Portfolio Optimization</h1>
+            <p class="header-subtitle">Professional Portfolio Analytics Platform</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <!-- Sidebar Controls -->
+            <aside class="sidebar">
+                <div class="control-panel">
+                    <h2>Factor Exposures</h2>
+                    
+                    <div class="control-group">
+                        <label for="mkt-slider" class="control-label">
+                            Market (MKT-RF)
+                            <span class="tooltip" title="Market factor capturing systematic risk affecting all securities">ⓘ</span>
+                        </label>
+                        <div class="slider-container">
+                            <input type="range" id="mkt-slider" min="0" max="2" step="0.1" value="1.0" class="slider">
+                            <span class="slider-value" id="mkt-value">1.0</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="smb-slider" class="control-label">
+                            Size (SMB)
+                            <span class="tooltip" title="Size factor representing small-cap vs large-cap premium">ⓘ</span>
+                        </label>
+                        <div class="slider-container">
+                            <input type="range" id="smb-slider" min="-0.5" max="0.5" step="0.1" value="0.0" class="slider">
+                            <span class="slider-value" id="smb-value">0.0</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="hml-slider" class="control-label">
+                            Value (HML)
+                            <span class="tooltip" title="Value factor measuring high book-to-market vs low book-to-market premium">ⓘ</span>
+                        </label>
+                        <div class="slider-container">
+                            <input type="range" id="hml-slider" min="-0.5" max="0.5" step="0.1" value="0.0" class="slider">
+                            <span class="slider-value" id="hml-value">0.0</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="rmw-slider" class="control-label">
+                            Profitability (RMW)
+                            <span class="tooltip" title="Profitability factor capturing quality premium of robust vs weak profitability">ⓘ</span>
+                        </label>
+                        <div class="slider-container">
+                            <input type="range" id="rmw-slider" min="-0.3" max="0.3" step="0.1" value="0.0" class="slider">
+                            <span class="slider-value" id="rmw-value">0.0</span>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <h3>Portfolio Constraints</h3>
+                    
+                    <div class="control-group">
+                        <label for="max-weight-slider" class="control-label">Maximum Weight per Asset</label>
+                        <div class="slider-container">
+                            <input type="range" id="max-weight-slider" min="0.05" max="0.5" step="0.05" value="0.2" class="slider">
+                            <span class="slider-value" id="max-weight-value">20%</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="min-weight-slider" class="control-label">Minimum Weight per Asset</label>
+                        <div class="slider-container">
+                            <input type="range" id="min-weight-slider" min="0" max="0.05" step="0.01" value="0" class="slider">
+                            <span class="slider-value" id="min-weight-value">0%</span>
+                        </div>
+                    </div>
+
+                    <button class="btn btn--primary optimize-btn" id="optimize-btn">
+                        Optimize Portfolio
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Results Area -->
+            <main class="results-area">
+                <!-- Portfolio Allocation -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Portfolio Allocation</h3>
+                        <button class="btn btn--secondary btn--sm" id="export-btn">Export Weights</button>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="allocation-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Factor Exposure Chart -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Factor Exposure Comparison</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="exposure-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Convergence Chart -->
+                <div class="chart-card">
+                    <div class="card-header">
+                        <h3>Optimization Convergence</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="convergence-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Key Metrics -->
+                <div class="metrics-card">
+                    <h3>Portfolio Metrics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="metric-label">Tracking Error</span>
+                            <span class="metric-value" id="tracking-error">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Number of Holdings</span>
+                            <span class="metric-value" id="num-holdings">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Largest Position</span>
+                            <span class="metric-value" id="largest-position">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Concentration (HHI)</span>
+                            <span class="metric-value" id="concentration">--</span>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

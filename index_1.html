@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factor Analytics - Hidden Alpha Portfolio Optimization</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="brand">
+                        <h1 class="brand-title">Factor Analytics</h1>
+                        <p class="brand-subtitle">Professional Portfolio Optimization Platform</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn--outline" id="exportBtn">Export Results</button>
+                        <button class="btn btn--primary" id="optimizeBtn">Optimize Portfolio</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="dashboard-main">
+            <div class="container">
+                <div class="dashboard-grid">
+                    <!-- Factor Controls Panel -->
+                    <section class="control-panel">
+                        <div class="card">
+                            <div class="card__header">
+                                <h3>Factor Targets</h3>
+                                <p class="text-secondary">Set your desired factor exposures</p>
+                            </div>
+                            <div class="card__body">
+                                <div class="factor-controls">
+                                    <div class="factor-control">
+                                        <label class="factor-label" for="mkt-rf">
+                                            <span class="factor-name">Market Risk Premium (Mkt-RF)</span>
+                                            <span class="factor-value" id="mkt-rf-value">1.00</span>
+                                        </label>
+                                        <input type="range" id="mkt-rf" class="factor-slider" min="0.5" max="1.5" step="0.01" value="1.00">
+                                        <div class="factor-tooltip">
+                                            Exposure to market risk premium - measures systematic risk
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="factor-control">
+                                        <label class="factor-label" for="smb">
+                                            <span class="factor-name">Small Minus Big (SMB)</span>
+                                            <span class="factor-value" id="smb-value">0.00</span>
+                                        </label>
+                                        <input type="range" id="smb" class="factor-slider" min="-0.5" max="0.5" step="0.01" value="0.00">
+                                        <div class="factor-tooltip">
+                                            Small cap vs large cap exposure - size factor
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="factor-control">
+                                        <label class="factor-label" for="hml">
+                                            <span class="factor-name">High Minus Low (HML)</span>
+                                            <span class="factor-value" id="hml-value">0.00</span>
+                                        </label>
+                                        <input type="range" id="hml" class="factor-slider" min="-0.5" max="0.5" step="0.01" value="0.00">
+                                        <div class="factor-tooltip">
+                                            Value vs growth exposure - book-to-market factor
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="factor-control">
+                                        <label class="factor-label" for="rmw">
+                                            <span class="factor-name">Robust Minus Weak (RMW)</span>
+                                            <span class="factor-value" id="rmw-value">0.00</span>
+                                        </label>
+                                        <input type="range" id="rmw" class="factor-slider" min="-0.2" max="0.4" step="0.01" value="0.00">
+                                        <div class="factor-tooltip">
+                                            Profitability factor - robust vs weak profitability
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="constraints-section">
+                                    <h4>Portfolio Constraints</h4>
+                                    <div class="constraint-controls">
+                                        <div class="constraint-control">
+                                            <label for="max-weight">Maximum Asset Weight (%)</label>
+                                            <input type="number" id="max-weight" class="form-control" min="1" max="100" value="15">
+                                        </div>
+                                        <div class="constraint-control">
+                                            <label for="min-assets">Minimum Assets</label>
+                                            <input type="number" id="min-assets" class="form-control" min="3" max="30" value="8">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Results Panel -->
+                    <section class="results-panel">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Portfolio Risk</div>
+                                <div class="metric-value" id="portfolio-risk">--</div>
+                                <div class="metric-change positive" id="risk-change">--</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Expected Return</div>
+                                <div class="metric-value" id="expected-return">--</div>
+                                <div class="metric-change positive" id="return-change">--</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Sharpe Ratio</div>
+                                <div class="metric-value" id="sharpe-ratio">--</div>
+                                <div class="metric-change positive" id="sharpe-change">--</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Active Assets</div>
+                                <div class="metric-value" id="active-assets">--</div>
+                                <div class="metric-change neutral" id="assets-change">--</div>
+                            </div>
+                        </div>
+
+                        <div class="chart-container">
+                            <div class="card">
+                                <div class="card__header">
+                                    <h3>Factor Exposure Analysis</h3>
+                                </div>
+                                <div class="card__body">
+                                    <canvas id="factorChart" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="portfolio-table-container">
+                            <div class="card">
+                                <div class="card__header">
+                                    <h3>Optimized Portfolio Allocation</h3>
+                                    <div class="table-actions">
+                                        <button class="btn btn--sm btn--secondary" id="sortByWeight">Sort by Weight</button>
+                                        <button class="btn btn--sm btn--secondary" id="sortBySymbol">Sort by Symbol</button>
+                                    </div>
+                                </div>
+                                <div class="card__body">
+                                    <div class="table-wrapper">
+                                        <table class="portfolio-table" id="portfolioTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Symbol</th>
+                                                    <th>Name</th>
+                                                    <th>Weight</th>
+                                                    <th>Mkt-RF</th>
+                                                    <th>SMB</th>
+                                                    <th>HML</th>
+                                                    <th>RMW</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="portfolioTableBody">
+                                                <tr class="no-data">
+                                                    <td colspan="7">Run optimization to see portfolio allocation</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Optimizing Portfolio...</p>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
